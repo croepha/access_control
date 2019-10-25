@@ -24,7 +24,7 @@ sqlite3 *db = 0;
 void db_add_user(const char* user_name);
 void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len);
 bool db_check_and_log_access();
-void db_list_log();
+void db_list_log(char* tmp_buf, size_t tmp_buf_len);
 void db_prune();
 void db_del_user(u64 uid);
 void db_init();
@@ -230,7 +230,7 @@ bool db_check_and_log_access() {
 
 
 
-void db_list_log() {
+void db_list_log(char* tmp_buf, size_t tmp_buf_len) {
     Serial.printf("DEBUG: log list:\n");
     static const char*q = "SELECT \"user\".\"name\", \"log\".\"when\" FROM \"user\", \"log\" WHERE \"log\".\"user_id\" = \"user\".\"id\" ORDER BY \"log\".\"when\" DESC";
     sqlite3_stmt *stmt = 0;

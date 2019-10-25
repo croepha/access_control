@@ -22,7 +22,7 @@ typedef int8_t   s8;
 void db_add_user(const char* user_name);
 void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len);
 bool db_check_and_log_access();
-void db_list_log();
+void db_list_log(char* tmp_buf, size_t tmp_buf_len);
 void db_prune();
 void db_del_user(u64 uid);
 void db_init();
@@ -258,6 +258,11 @@ void loop() {
 
     server.onNotFound([&](){
       redirect("/");
+    });
+    server.on("/view_accesses", [&](){
+      set_no_cache();
+      db_list_log(tmp_buf, sizeof tmp_buf);
+      server.send(200, "text/html", tmp_buf);
     });
     server.on("/del", [&](){
       db_del_user(atoi(server.arg("id").c_str())); // what happens if arg isn't present? oh well, we just trust the client in program mode...
