@@ -127,6 +127,7 @@ void db_add_user(const char* user_name) {
 void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len) {
     
     size_t tmp_buf_used = 0;
+    *tmp_buf = 0;
     
     Serial.printf("DEBUG: user list:\n");
     static const char*q = "SELECT \"id\", \"name\", \"last_seen\" FROM \"user\" WHERE \"active\" = TRUE";
@@ -143,7 +144,7 @@ void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len) {
         auto new_used = snprintf(
             tmp_buf + tmp_buf_used, 
             tmp_buf_len - tmp_buf_used,
-            "<p><a href=/del?id=%s>%s:%s</a></p>",
+            "<p><a href=/del?id=%s>%s:%s %s</a></p>",
             sqlite3_column_text(stmt, 0),
             sqlite3_column_text(stmt, 2),
             sqlite3_column_text(stmt, 1)
@@ -231,39 +232,46 @@ bool db_check_and_log_access() {
 
 
 void db_list_log(char* tmp_buf, size_t tmp_buf_len) {
-    Serial.printf("DEBUG: log list:\n");
-    static const char*q = "SELECT \"user\".\"name\", \"log\".\"when\" FROM \"user\", \"log\" WHERE \"log\".\"user_id\" = \"user\".\"id\" ORDER BY \"log\".\"when\" DESC";
+    
+    size_t tmp_buf_used = 0;
+    *tmp_buf = 0;
+    
+    static const char*q = "SELECT \"user\".\"name\", \"log\".\"when\", \"log\".\"type\" FROM \"user\", \"log\" WHERE \"log\".\"user_id\" = \"user\".\"id\" ORDER BY \"log\".\"when\" DESC";
     sqlite3_stmt *stmt = 0;
     int r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
     db_assert_ok(r1);
     assert(stmt);
-    Serial.printf("DEBUG: 1\n");
     
-    Serial.printf("Debug Access: COUNT %d \n",
-                  sqlite3_column_count(stmt)
-                  );
+    
     for(;;) {
-        Serial.printf("DEBUG: 2\n");
         auto r3 = sqlite3_step(stmt);
         if (r3 == SQLITE_DONE) break;
         assert(r3==SQLITE_ROW);
-        Serial.printf("DEBUG: 3\n");
         
-        Serial.printf("Debug Access3: `%s' `%s' \n",
-                      sqlite3_column_text(stmt, 0),
-                      sqlite3_column_text(stmt, 1)
-                      );
-        Serial.printf("%lld\n", sqlite3_column_int64(stmt, 1));
+        const char*type = (const char*)sqlite3_column_text(stmt, 2);
+        char*type_string = "????";
+        if (strcmp(type, "N")==0) {
+            type_string = "ADDED";
+        } else if (strcmp(type, "A")==0) {
+            type_string = "ACCESS";
+        } else if (strcmp(type, "D")==0) {
+            type_string = "REMOVED";
+        }
         
-        Serial.printf("Debug Access4: `%s' `%s' \n",
-                      sqlite3_column_text(stmt, 1),
-                      sqlite3_column_text(stmt, 0)
-                      );
         
-        Serial.printf("Debug Access: %lld `%s' \n",
-                      sqlite3_column_int64(stmt, 1),
-                      sqlite3_column_text(stmt, 0)
-                      );
+        auto new_used = snprintf(
+            tmp_buf + tmp_buf_used, 
+            tmp_buf_len - tmp_buf_used,
+            "<p> %s : %s : %s </p>",
+            sqlite3_column_text(stmt, 1),
+            sqlite3_column_text(stmt, 0),
+            type_string
+            );
+        if (new_used < 0) {
+            Serial.printf("access list overflow\n");
+            break;
+        }
+        tmp_buf_used += new_used;
     }
     
     auto r6 = sqlite3_finalize(stmt);
@@ -304,17 +312,35 @@ void db_prune() {
 
 void db_del_user(u64 uid) {
     Serial.printf("DEBUG: del user %lld\n", uid);
-    static const char*q = "UPDATE \"user\" SET \"active\" = FALSE WHERE \"id\" = ?;";
-    sqlite3_stmt *stmt;
-    auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
-    db_assert_ok(r1);
-    assert(stmt);
-    auto r3 = sqlite3_bind_int64(stmt, 1, uid);
-    db_assert_ok(r3);
-    auto r2 = sqlite3_step(stmt);
-    assert(r2 == SQLITE_DONE);
-    auto r4 = sqlite3_finalize(stmt);
-    db_assert_ok(r4);
+    u64 now = get_adjusted_time();
+    {
+        static const char*q = "UPDATE \"user\" SET \"active\" = FALSE WHERE \"id\" = ?;";
+        sqlite3_stmt *stmt;
+        auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
+        db_assert_ok(r1);
+        assert(stmt);
+        auto r3 = sqlite3_bind_int64(stmt, 1, uid);
+        db_assert_ok(r3);
+        auto r2 = sqlite3_step(stmt);
+        assert(r2 == SQLITE_DONE);
+        auto r4 = sqlite3_finalize(stmt);
+        db_assert_ok(r4);
+    }
+    {
+        static const char*q = "INSERT INTO \"log\" (\"user_id\", \"when\", \"type\") VALUES (?, ?, 'D')";
+        sqlite3_stmt *stmt;
+        auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
+        db_assert_ok(r1);
+        assert(stmt);
+        auto r3 = sqlite3_bind_int64(stmt, 1, uid);
+        db_assert_ok(r3);
+        auto r4 = sqlite3_bind_int64(stmt, 2, now);
+        db_assert_ok(r4);
+        auto r2 = sqlite3_step(stmt);
+        assert(r2 == SQLITE_DONE);
+        auto r6 = sqlite3_finalize(stmt);
+        db_assert_ok(r6);    
+    }
 }
 
 

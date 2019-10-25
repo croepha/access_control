@@ -174,6 +174,7 @@ server.sendHeader("Expires", "0", true);
 
 
 void loop() {
+  // TODO: if no users, should go to program mode...
   // TODO: if time is not set, then goto maintenance...
   idle: {
     Serial.println("IDLE\n");
@@ -219,7 +220,7 @@ void loop() {
       Serial.print("UID: ");
       debug_print_rfid();
   
-      if (1) {
+      if (db_check_and_log_access()) {
         goto unlock;
       } else {
         error_ticks = 100;
@@ -259,7 +260,7 @@ void loop() {
     server.onNotFound([&](){
       redirect("/");
     });
-    server.on("/view_accesses", [&](){
+    server.on("/view_log", [&](){
       set_no_cache();
       db_list_log(tmp_buf, sizeof tmp_buf);
       server.send(200, "text/html", tmp_buf);
@@ -294,14 +295,14 @@ void loop() {
           Serial.println(server.arg(username_arg));
           Serial.print("UID: ");
           debug_print_rfid();
-          db_add_user(server.arg(username_arg));
+          db_add_user(server.arg(username_arg).c_str());
           ESP.restart();
 
 
         }
       } else {
         server.send(200, "text/html", 
-        "<p><a href=/view_access>View recent accesses</a></p>"
+        "<p><a href=/view_log>View recent accesses</a></p>"
         "<p><a href=/delete_list>Delete Users</a></p>"
         "<p><form method=post><h1>Enter name for new person</h1>"
         "<input type=text name=username /><input type=submit /></p>"
