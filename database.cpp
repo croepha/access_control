@@ -400,7 +400,7 @@ void db_init() {
     
     {
         static const char*q = R"SQLSQLSQL(
-    CREATE TABLE IF NOT EXISTS user (
+    CREATE TABLE IF NOT EXISTS "user" (
         'id'        INTEGER PRIMARY KEY,
         'rfid'      BLOB    NOT NULL,
         'name'      TEXT    NOT NULL,
@@ -410,6 +410,7 @@ void db_init() {
     )SQLSQLSQL";
         sqlite3_stmt *stmt;
         auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
+        Serial.printf("DEBUG db schema'%s'\n", q);
         db_assert_ok(r1);
         assert(stmt);
         auto r2 = sqlite3_step(stmt);
