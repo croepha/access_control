@@ -107,6 +107,35 @@ void setup() {
   auto r1 = SPIFFS.begin(true);
   assert(r1);
 
+  //SPIFFS.remove("/test3");
+  //SPIFFS.remove("/test3-journal");
+
+  // list SPIFFS contents
+  File root = SPIFFS.open("/");
+  if (!root) {
+    Serial.println("- failed to open directory");
+    return;
+  }
+  if (!root.isDirectory()) {
+    Serial.println(" - not a directory");
+    return;
+  }
+  File file = root.openNextFile();
+  while (file) {
+    if (file.isDirectory()) {
+      Serial.print("  DIR : ");
+      Serial.println(file.name());
+    } else {
+      Serial.print("  FILE: ");
+      Serial.print(file.name());
+      Serial.print("\tSIZE: ");
+      Serial.println(file.size());
+    }
+    file = root.openNextFile();
+  }
+
+    
+
   db_init();
 
   SPI.begin(); // Init SPI bus
@@ -171,6 +200,7 @@ void set_led_white() {
 server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate", true); \
 server.sendHeader("Pragma", "no-cache", true); \
 server.sendHeader("Expires", "0", true); 
+
 
 
 void loop() {
@@ -250,6 +280,8 @@ void loop() {
 
   program: {
     Serial.println("PROGRAM\n");
+    digitalWrite(PIN_UNLOCK, 0);
+
     WiFi.softAP("access_control", "access_control");
     MDNS.begin("access_control");
     WebServer server(80);

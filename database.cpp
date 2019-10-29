@@ -39,6 +39,15 @@ inline static void __db_assert_ok(int r, const char*file, int line) {
     }
 }
 
+#define db_assert_eq(m_r,m_e) __db_assert_eq(m_r, m_e, __FILE__, __LINE__)
+inline static void __db_assert_eq(int r, int eq, const char*file, int line) {
+    if (r != eq) {
+        Serial.printf("ERROR: %s:%d: SQL ERROR:%d: %s\n", file, line, r, sqlite3_errmsg(db));
+        abort();
+    }
+}
+
+
 inline static void debug_print_rfid() {
     for (int i=0;i<rfid_len;i++) {
         Serial.printf("%02x ", rfid[i]);
@@ -58,10 +67,10 @@ void db_set_rtc_offset() {
     if (r2 == SQLITE_DONE) {
         rtc_offset = 0;
     } else {
-        assert(r2 == SQLITE_ROW);
+        db_assert_eq(r2, SQLITE_ROW);
         rtc_offset = sqlite3_column_int64(stmt, 0) - time(0);
         auto r3 = sqlite3_step(stmt);
-        assert(r3 == SQLITE_DONE);  
+        db_assert_eq(r3, SQLITE_DONE);
     }
     
     auto r4 = sqlite3_finalize(stmt);
@@ -83,7 +92,7 @@ void db_add_user(const char* user_name) {
         auto r3 = sqlite3_bind_blob(stmt, 1, rfid, rfid_len, SQLITE_TRANSIENT);
         db_assert_ok(r3);
         auto r2 = sqlite3_step(stmt);
-        assert(r2 == SQLITE_DONE);
+        db_assert_eq(r2, SQLITE_DONE);
         auto r4 = sqlite3_finalize(stmt);
         db_assert_ok(r4);
     }
@@ -100,7 +109,7 @@ void db_add_user(const char* user_name) {
         auto r5 = sqlite3_bind_int64(stmt, 3, now);
         db_assert_ok(r5);
         auto r2 = sqlite3_step(stmt);
-        assert(r2 == SQLITE_DONE);
+        db_assert_eq(r2, SQLITE_DONE);
         auto r6 = sqlite3_finalize(stmt);
         db_assert_ok(r6);
     }
@@ -117,10 +126,12 @@ void db_add_user(const char* user_name) {
         auto r4 = sqlite3_bind_int64(stmt, 2, now);
         db_assert_ok(r4);
         auto r2 = sqlite3_step(stmt);
-        assert(r2 == SQLITE_DONE);
+        db_assert_eq(r2, SQLITE_DONE);
         auto r6 = sqlite3_finalize(stmt);
         db_assert_ok(r6);    
     }
+    auto r90 = sqlite3_db_cacheflush(db);
+    db_assert_ok(r90);
 }
 
 
@@ -139,15 +150,19 @@ void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len) {
     for(;;) {
         auto r3 = sqlite3_step(stmt);
         if (r3 == SQLITE_DONE) break;
-        assert(r3==SQLITE_ROW);
+        db_assert_eq(r3, SQLITE_ROW);
+        
+        auto t1 = sqlite3_column_text(stmt, 0);
+        auto t2 = sqlite3_column_text(stmt, 2);
+        auto t3 = sqlite3_column_text(stmt, 1);
+        
+        Serial.printf("debug1: %p, %p %p\n", t1, t2, t3);
         
         auto new_used = snprintf(
             tmp_buf + tmp_buf_used, 
             tmp_buf_len - tmp_buf_used,
             "<p><a href=/del?id=%s>%s:%s %s</a></p>",
-            sqlite3_column_text(stmt, 0),
-            sqlite3_column_text(stmt, 2),
-            sqlite3_column_text(stmt, 1)
+            t1,t2,t3
             );
         if (new_used < 0) {
             Serial.printf("delete list overflow\n");
@@ -185,10 +200,10 @@ bool db_check_and_log_access() {
             db_assert_ok(r7);
             return 0;
         } 
-        assert(r2 == SQLITE_ROW);
+        db_assert_eq(r2, SQLITE_ROW);
         id = sqlite3_column_int64(stmt, 0);
         auto r3 = sqlite3_step(stmt);
-        assert(r3 == SQLITE_DONE);  
+        db_assert_eq(r3, SQLITE_DONE);
         auto r6 = sqlite3_finalize(stmt);
         db_assert_ok(r6);
     }
@@ -204,7 +219,7 @@ bool db_check_and_log_access() {
         auto r4 = sqlite3_bind_int64(stmt, 2, now);
         db_assert_ok(r4);
         auto r2 = sqlite3_step(stmt);
-        assert(r2 == SQLITE_DONE);
+        db_assert_eq(r2, SQLITE_DONE);
         auto r6 = sqlite3_finalize(stmt);
         db_assert_ok(r6);    
     }
@@ -219,10 +234,12 @@ bool db_check_and_log_access() {
         auto r4 = sqlite3_bind_int64(stmt, 2, id);
         db_assert_ok(r4);
         auto r2 = sqlite3_step(stmt);
-        assert(r2 == SQLITE_DONE);
+        db_assert_eq(r2, SQLITE_DONE);
         auto r6 = sqlite3_finalize(stmt);
         db_assert_ok(r6);    
     }
+    auto r90 = sqlite3_db_cacheflush(db);
+    db_assert_ok(r90);
     
     Serial.printf("DEBUG: granted\n");
     return 1;
@@ -246,7 +263,7 @@ void db_list_log(char* tmp_buf, size_t tmp_buf_len) {
     for(;;) {
         auto r3 = sqlite3_step(stmt);
         if (r3 == SQLITE_DONE) break;
-        assert(r3==SQLITE_ROW);
+        db_assert_eq(r3, SQLITE_ROW);
         
         const char*type = (const char*)sqlite3_column_text(stmt, 2);
         char*type_string = "????";
@@ -291,7 +308,7 @@ void db_prune() {
         auto r3 = sqlite3_bind_int64(stmt, 1, (s64)now - 60*60*24*5);
         db_assert_ok(r3);
         auto r2 = sqlite3_step(stmt);
-        assert(r2 == SQLITE_DONE);
+        db_assert_eq(r2, SQLITE_DONE);
         auto r4 = sqlite3_finalize(stmt);
         db_assert_ok(r4);    
     }
@@ -304,10 +321,12 @@ void db_prune() {
         auto r3 = sqlite3_bind_int64(stmt, 1, (s64)now - 60*60*24*30*6);
         db_assert_ok(r3);
         auto r2 = sqlite3_step(stmt);
-        assert(r2 == SQLITE_DONE);
+        db_assert_eq(r2, SQLITE_DONE);
         auto r4 = sqlite3_finalize(stmt);
         db_assert_ok(r4);    
     }
+    auto r90 = sqlite3_db_cacheflush(db);
+    db_assert_ok(r90);
 }
 
 void db_del_user(u64 uid) {
@@ -322,7 +341,7 @@ void db_del_user(u64 uid) {
         auto r3 = sqlite3_bind_int64(stmt, 1, uid);
         db_assert_ok(r3);
         auto r2 = sqlite3_step(stmt);
-        assert(r2 == SQLITE_DONE);
+        db_assert_eq(r2, SQLITE_DONE);
         auto r4 = sqlite3_finalize(stmt);
         db_assert_ok(r4);
     }
@@ -337,10 +356,12 @@ void db_del_user(u64 uid) {
         auto r4 = sqlite3_bind_int64(stmt, 2, now);
         db_assert_ok(r4);
         auto r2 = sqlite3_step(stmt);
-        assert(r2 == SQLITE_DONE);
+        db_assert_eq(r2, SQLITE_DONE);
         auto r6 = sqlite3_finalize(stmt);
         db_assert_ok(r6);    
     }
+    auto r90 = sqlite3_db_cacheflush(db);
+    db_assert_ok(r90);
 }
 
 
@@ -363,6 +384,8 @@ void debug_exec(const char*sql) {
     } else {
         Serial.printf("Operation done successfully\n");
     }
+    auto r90 = sqlite3_db_cacheflush(db);
+    db_assert_ok(r90);
     
 }
 
@@ -411,10 +434,12 @@ void db_init() {
         db_assert_ok(r1);
         assert(stmt);
         auto r2 = sqlite3_step(stmt);
-        assert(r2 == SQLITE_DONE);
+        db_assert_eq(r2, SQLITE_DONE);
         auto r4 = sqlite3_finalize(stmt);
         db_assert_ok(r4);    
     }
+    auto r90 = sqlite3_db_cacheflush(db);
+    db_assert_ok(r90);
     
     db_set_rtc_offset();
 }
