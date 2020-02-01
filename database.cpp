@@ -1,9 +1,15 @@
 
 
 #include <sqlite3.h>
-#include <SPI.h>
-#include <FS.h>
-#include <SPIFFS.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
+#include <stdio.h>
+#include <assert.h>
+#include <string.h>
+//#include <SPI.h>
+//#include <FS.h>
+//#include <SPIFFS.h>
 
 typedef uint64_t u64;
 typedef uint32_t u32;
@@ -19,6 +25,10 @@ extern u64 rtc_offset;
 extern u8 rfid[10];
 extern u8 rfid_len;
 
+#ifndef debugf
+#define debugf Serial.printf
+#endif
+
 sqlite3 *db = 0;
 
 void db_add_user(const char* user_name);
@@ -27,14 +37,15 @@ bool db_check_and_log_access();
 void db_list_log(char* tmp_buf, size_t tmp_buf_len);
 void db_prune();
 void db_del_user(u64 uid);
-void db_init();
+void db_init(char*file_name);
 
-inline static u64 get_adjusted_time() { return time(0) + rtc_offset; }
+u64 get_adjusted_time();
+
 
 #define db_assert_ok(m_r) __db_assert_ok(m_r, __FILE__, __LINE__)
 inline static void __db_assert_ok(int r, const char*file, int line) {
     if (r != SQLITE_OK) {
-        Serial.printf("ERROR: %s:%d: SQL ERROR:%d: %s\n", file, line, r, sqlite3_errmsg(db));
+        debugf("ERROR: %s:%d: SQL ERROR:%d: %s\n", file, line, r, sqlite3_errmsg(db));
         abort();
     }
 }
@@ -42,7 +53,7 @@ inline static void __db_assert_ok(int r, const char*file, int line) {
 #define db_assert_eq(m_r,m_e) __db_assert_eq(m_r, m_e, __FILE__, __LINE__)
 inline static void __db_assert_eq(int r, int eq, const char*file, int line) {
     if (r != eq) {
-        Serial.printf("ERROR: %s:%d: SQL ERROR:%d: %s\n", file, line, r, sqlite3_errmsg(db));
+        debugf("ERROR: %s:%d: SQL ERROR:%d: %s\n", file, line, r, sqlite3_errmsg(db));
         abort();
     }
 }
@@ -50,9 +61,9 @@ inline static void __db_assert_eq(int r, int eq, const char*file, int line) {
 
 inline static void debug_print_rfid() {
     for (int i=0;i<rfid_len;i++) {
-        Serial.printf("%02x ", rfid[i]);
+        debugf("%02x ", rfid[i]);
     }
-    Serial.printf("\n");
+    debugf("\n");
 }
 
 
@@ -79,7 +90,7 @@ void db_set_rtc_offset() {
 
 
 void db_add_user(const char* user_name) {
-    Serial.printf("DEBUG: db_add_user %d `%s'\n", rfid_len, user_name);
+    debugf("DEBUG: db_add_user %d `%s'\n", rfid_len, user_name);
     debug_print_rfid();
     
     u64 now = get_adjusted_time();
@@ -140,7 +151,7 @@ void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len) {
     size_t tmp_buf_used = 0;
     *tmp_buf = 0;
     
-    Serial.printf("DEBUG: user list:\n");
+    debugf("DEBUG: user list:\n");
     static const char*q = "SELECT \"id\", \"name\", \"last_seen\" FROM \"user\" WHERE \"active\" = TRUE";
     sqlite3_stmt *stmt;
     auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
@@ -152,20 +163,20 @@ void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len) {
         if (r3 == SQLITE_DONE) break;
         db_assert_eq(r3, SQLITE_ROW);
         
-        auto t1 = sqlite3_column_text(stmt, 0);
-        auto t2 = sqlite3_column_text(stmt, 2);
-        auto t3 = sqlite3_column_text(stmt, 1);
+        auto t_id        = sqlite3_column_text(stmt, 0);
+        auto t_last_seen = sqlite3_column_text(stmt, 2);
+        auto t_name      = sqlite3_column_text(stmt, 1);
         
-        Serial.printf("debug1: %p, %p %p\n", t1, t2, t3);
+        debugf("debug1: %p, %p %p\n", t_id, t_last_seen, t_name);
         
         auto new_used = snprintf(
             tmp_buf + tmp_buf_used, 
             tmp_buf_len - tmp_buf_used,
-            "<p><a href=/del?id=%s>%s:%s %s</a></p>",
-            t1,t2,t3
+            "<p><a href=/del?id=%s>%s:%s</a></p>",
+            t_id,t_last_seen,t_name
             );
         if (new_used < 0) {
-            Serial.printf("delete list overflow\n");
+            debugf("delete list overflow\n");
             break;
         }
         tmp_buf_used += new_used;
@@ -177,7 +188,7 @@ void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len) {
 }
 
 bool db_check_and_log_access() {
-    Serial.printf("DEBUG: check and log access %d\n", rfid_len);
+    debugf("DEBUG: check and log access %d\n", rfid_len);
     debug_print_rfid();
     
     u64 now = get_adjusted_time();
@@ -195,7 +206,7 @@ bool db_check_and_log_access() {
         
         auto r2 = sqlite3_step(stmt);
         if (r2 == SQLITE_DONE) {
-            Serial.printf("DEBUG: denied\n");
+            debugf("DEBUG: denied\n");
             auto r7 = sqlite3_finalize(stmt);
             db_assert_ok(r7);
             return 0;
@@ -241,7 +252,7 @@ bool db_check_and_log_access() {
     auto r90 = sqlite3_db_cacheflush(db);
     db_assert_ok(r90);
     
-    Serial.printf("DEBUG: granted\n");
+    debugf("DEBUG: granted\n");
     return 1;
     
 }
@@ -285,7 +296,7 @@ void db_list_log(char* tmp_buf, size_t tmp_buf_len) {
             type_string
             );
         if (new_used < 0) {
-            Serial.printf("access list overflow\n");
+            debugf("access list overflow\n");
             break;
         }
         tmp_buf_used += new_used;
@@ -297,7 +308,7 @@ void db_list_log(char* tmp_buf, size_t tmp_buf_len) {
 }
 
 void db_prune() {
-    Serial.printf("DEBUG: prune \n");
+    debugf("DEBUG: prune \n");
     u64 now = get_adjusted_time();
     {
         static const char*q = "DELETE FROM \"log\" WHERE \"when\" < ?;";
@@ -330,7 +341,7 @@ void db_prune() {
 }
 
 void db_del_user(u64 uid) {
-    Serial.printf("DEBUG: del user %lld\n", uid);
+    debugf("DEBUG: del user %lld\n", uid);
     u64 now = get_adjusted_time();
     {
         static const char*q = "UPDATE \"user\" SET \"active\" = FALSE WHERE \"id\" = ?;";
@@ -368,21 +379,21 @@ void db_del_user(u64 uid) {
 static int callback(void *data, int argc, char **argv, char **azColName) {
     int i;
     for (i = 0; i<argc; i++){
-        Serial.printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+        debugf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
     }
-    Serial.printf("\n");
+    debugf("\n");
     return 0;
 }
 
 void debug_exec(const char*sql) {
-    Serial.printf("Execing debug SQL: %s\n", sql);  
+    debugf("Execing debug SQL: %s\n", sql);  
     char *zErrMsg = 0;
     int rc = sqlite3_exec(db, sql, callback, 0, &zErrMsg);
     if (rc != SQLITE_OK) {
-        Serial.printf("SQL error: %s\n", zErrMsg);
+        debugf("SQL error: %s\n", zErrMsg);
         sqlite3_free(zErrMsg);
     } else {
-        Serial.printf("Operation done successfully\n");
+        debugf("Operation done successfully\n");
     }
     auto r90 = sqlite3_db_cacheflush(db);
     db_assert_ok(r90);
@@ -390,11 +401,11 @@ void debug_exec(const char*sql) {
 }
 
 
-void db_init() {
+void db_init(char*file_name) {
     sqlite3_initialize();
     
-    {
-        auto r1 = sqlite3_open("/spiffs/test3", &db);
+    {  // "/spiffs/test3"
+        auto r1 = sqlite3_open(file_name, &db);
         db_assert_ok(r1);
     }
     
@@ -410,7 +421,7 @@ void db_init() {
     )SQLSQLSQL";
         sqlite3_stmt *stmt;
         auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
-        Serial.printf("DEBUG db schema'%s'\n", q);
+        debugf("DEBUG db schema'%s'\n", q);
         db_assert_ok(r1);
         assert(stmt);
         auto r2 = sqlite3_step(stmt);

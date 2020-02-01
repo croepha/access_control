@@ -34,6 +34,9 @@ u8 rfid[10];
 u8 rfid_len;
 
 
+u64 get_adjusted_time() { return time(0) + rtc_offset; }
+
+
 inline static void debug_print_rfid() {
     for (int i=0;i<rfid_len;i++) {
         Serial.printf("%02x ", rfid[i]);
@@ -272,7 +275,6 @@ void loop() {
       bool t0 = IS_TOUCH(0);
       if (t0) goto program;
       digitalWrite(PIN_UNLOCK, unlock_ticks%16!=0);
-          
       set_led_green();
       delay(1);  
     } 
@@ -329,7 +331,6 @@ void loop() {
           debug_print_rfid();
           db_add_user(server.arg(username_arg).c_str());
           ESP.restart();
-
 
         }
       } else {
