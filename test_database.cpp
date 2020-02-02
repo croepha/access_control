@@ -70,8 +70,9 @@ int main () {
     
     debug_time = 0;
     
-    unlink("test_db0");
-    db_init("test_db0");
+    
+    unlink("build/test_db0");
+    db_init("build/test_db0");
     
     check("", "");
     
