@@ -29,7 +29,14 @@ extern u8 rfid_len;
 #define debugf Serial.printf
 #endif
 
+#if 1
+void dummy_debugf(char*,...) {}
+#undef debugf
+#define debugf dummy_debugf
+#endif
+
 sqlite3 *db = 0;
+
 
 void db_add_user(const char* user_name);
 void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len);
@@ -38,6 +45,7 @@ void db_list_log(char* tmp_buf, size_t tmp_buf_len);
 void db_prune();
 void db_del_user(u64 uid);
 void db_init(char*file_name);
+bool db_has_users();
 
 u64 get_adjusted_time();
 
@@ -89,13 +97,36 @@ void db_set_rtc_offset() {
 }
 
 
+bool db_has_users() {
+    
+    static const char*q = "SELECT 1 FROM \"user\" WHERE \"active\" = 1 LIMIT 1";
+    sqlite3_stmt *stmt;
+    auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
+    db_assert_ok(r1);
+    assert(stmt);
+    bool ret = 0;
+    auto r2 = sqlite3_step(stmt);
+    if (r2 == SQLITE_DONE) {
+    } else {
+        db_assert_eq(r2, SQLITE_ROW);
+        auto r3 = sqlite3_step(stmt);
+        db_assert_eq(r3, SQLITE_DONE);
+        ret = 1;
+    }
+    
+    auto r4 = sqlite3_finalize(stmt);
+    db_assert_ok(r4);
+    return ret;
+}
+
+
 void db_add_user(const char* user_name) {
     debugf("DEBUG: db_add_user %d `%s'\n", rfid_len, user_name);
     debug_print_rfid();
     
     u64 now = get_adjusted_time();
     {
-        static const char*q = "UPDATE \"user\" SET \"active\" = FALSE WHERE \"rfid\" = ?";
+        static const char*q = "UPDATE \"user\" SET \"active\" = 0 WHERE \"rfid\" = ?";
         sqlite3_stmt *stmt;
         auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
         db_assert_ok(r1);
@@ -108,7 +139,7 @@ void db_add_user(const char* user_name) {
         db_assert_ok(r4);
     }
     {
-        static const char*q = "INSERT INTO \"user\" (\"rfid\", \"name\", \"last_seen\", \"active\") VALUES (?, ?, ?, TRUE)";
+        static const char*q = "INSERT INTO \"user\" (\"rfid\", \"name\", \"last_seen\", \"active\") VALUES (?, ?, ?, 1)";
         sqlite3_stmt *stmt;
         auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
         db_assert_ok(r1);
@@ -151,8 +182,8 @@ void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len) {
     size_t tmp_buf_used = 0;
     *tmp_buf = 0;
     
-    debugf("DEBUG: user list:\n");
-    static const char*q = "SELECT \"id\", \"name\", \"last_seen\" FROM \"user\" WHERE \"active\" = TRUE";
+    static const char*q = "SELECT \"id\", \"name\", \"last_seen\" FROM \"user\" WHERE \"active\" = 1";
+    debugf("DEBUG: user list: --%s--\n", q);
     sqlite3_stmt *stmt;
     auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
     db_assert_ok(r1);
@@ -194,7 +225,7 @@ bool db_check_and_log_access() {
     u64 now = get_adjusted_time();
     int id = -1;
     {
-        static const char*q = "SELECT \"user\".\"id\" FROM \"user\" WHERE \"user\".\"active\" = TRUE AND \"user\".\"rfid\" = ?";
+        static const char*q = "SELECT \"user\".\"id\" FROM \"user\" WHERE \"user\".\"active\" = 1 AND \"user\".\"rfid\" = ?";
         sqlite3_stmt *stmt;
         auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
         db_assert_ok(r1);
@@ -341,10 +372,10 @@ void db_prune() {
 }
 
 void db_del_user(u64 uid) {
-    debugf("DEBUG: del user %lld\n", uid);
+    debugf("DEBUG: del user %ld\n", uid);
     u64 now = get_adjusted_time();
     {
-        static const char*q = "UPDATE \"user\" SET \"active\" = FALSE WHERE \"id\" = ?;";
+        static const char*q = "UPDATE \"user\" SET \"active\" = 0 WHERE \"id\" = ?;";
         sqlite3_stmt *stmt;
         auto r1 = sqlite3_prepare_v2(db, q, -1, &stmt, 0);
         db_assert_ok(r1);

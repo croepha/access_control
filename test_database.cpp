@@ -21,6 +21,7 @@ void db_list_log(char* tmp_buf, size_t tmp_buf_len);
 void db_prune();
 void db_del_user(u64 uid);
 void db_init(char*file_name);
+bool db_has_users();
 
 u64  rtc_offset = 0;
 u8   rfid[10];
@@ -57,6 +58,11 @@ void dump() {
     printf("del: \"%s\" end_del\n", tmp_buf);
 }
 
+#define check_access(m_r, m_v) \
+set_rfid(m_r); \
+assert(db_check_and_log_access() == m_v);
+
+
 
 int main () {
     setbuf(stderr, 0);
@@ -69,9 +75,10 @@ int main () {
     
     check("", "");
     
-    set_rfid("abcdef");
-    auto r0 = db_check_and_log_access();
-    assert(r0 == 0);
+    
+    check_access("abcdef", 0);
+    check_access("abcdef-", 0);
+    assert(db_has_users() == 0);
     
     check("", "");
     
@@ -81,14 +88,70 @@ int main () {
     set_rfid("abcdef");
     db_add_user("new_user0");
     
-    check(
-        "<p> 1 : new_user0 : ADDED </p>",
-        "<p><a href=/del?id=1>1:new_user0</a></p>");
+    assert(db_has_users() == 1);
     
+    
+    check(
+        "<p> 2 : new_user0 : ADDED </p>",
+        "<p><a href=/del?id=1>2:new_user0</a></p>");
+    
+    
+    check_access("abcdef", 1);
+    check_access("abcdef-", 0);
+    
+    check(
+        "<p> 3 : new_user0 : ACCESS </p><p> 2 : new_user0 : ADDED </p>",
+        "<p><a href=/del?id=1>3:new_user0</a></p>");
+    
+    assert(db_has_users() == 1);
+    
+    db_del_user(1);
+    assert(db_has_users() == 0);
+    
+    
+    check(
+        "<p> 5 : new_user0 : REMOVED </p>"
+        "<p> 3 : new_user0 : ACCESS </p>"
+        "<p> 2 : new_user0 : ADDED </p>",
+        "");
+    
+    check_access("abcdef", 0);
+    check_access("abcdef-", 0);
+    
+    
+    check(
+        "<p> 5 : new_user0 : REMOVED </p>"
+        "<p> 3 : new_user0 : ACCESS </p>"
+        "<p> 2 : new_user0 : ADDED </p>",
+        "");
+    
+    
+    assert(db_has_users() == 0);
     
     set_rfid("abcdef");
-    auto r0 = db_check_and_log_access();
-    assert(r0 == 0);
+    db_add_user("new_user1");
+    
+    assert(db_has_users() == 1);
+    
+    
+    check(
+        "<p> 8 : new_user1 : ADDED </p>"
+        "<p> 5 : new_user0 : REMOVED </p>"
+        "<p> 3 : new_user0 : ACCESS </p>"
+        "<p> 2 : new_user0 : ADDED </p>",
+        "<p><a href=/del?id=2>8:new_user1</a></p>");
+    
+    
+    check_access("abcdef", 1);
+    check_access("abcdef-", 0);
+    
+    check(
+        "<p> 9 : new_user1 : ACCESS </p>"
+        "<p> 8 : new_user1 : ADDED </p>"
+        "<p> 5 : new_user0 : REMOVED </p>"
+        "<p> 3 : new_user0 : ACCESS </p>"
+        "<p> 2 : new_user0 : ADDED </p>",
+        "<p><a href=/del?id=2>9:new_user1</a></p>");
     
     
     
