@@ -3,10 +3,14 @@
 
 #if 1
 
-extern sqlite3*db
+#include <SPIFFS.h> 
+#include <sqlite3.h>
+
+
+extern sqlite3*db;
 
 static const int MAX_LEN = 1024;
-static char buffer[MAX_LEN];
+static char line_buffer[MAX_LEN];
 static int len = 0;
 
 static char* line;
@@ -88,12 +92,12 @@ void serial_process() {
             Serial.printf("Got a line: '%s'\n", line_buffer);
             
             auto command_word = get_word();
-            Serial.printf("First word: '%s'\n", first_word);
+            Serial.printf("Command word: '%s'\n", command_word);
             
-            if (strcmp(command_word_word, "ls") == 0) {
+            if (strcmp(command_word, "ls") == 0) {
                 File root = SPIFFS.open("/");
                 while(File file = root.openNextFile()) {
-                    if (file.isDirectory) {
+                    if (file.isDirectory()) {
                         Serial.printf("LS: '%s' *DIR*\n", file.name());
                     } else {
                         unsigned long long sz = file.size();
@@ -101,14 +105,14 @@ void serial_process() {
                     }
                 }
                 Serial.printf("LS END\n");
-            } else if (strcmp(command_word_word, "boot") == 0) {
+            } else if (strcmp(command_word, "boot") == 0) {
                 Serial.printf("ok, booting now\n");
                 processing_commands = 0;
-            } else if (strcmp(command_word_word, "rm") == 0) {
+            } else if (strcmp(command_word, "rm") == 0) {
                 auto file_name = get_word();
                 long r1 = SPIFFS.remove(file_name);
                 Serial.printf("RM: '%s' -> %l\n", r1);
-            } else if (strcmp(command_word_word, "sql") == 0) {
+            } else if (strcmp(command_word, "sql") == 0) {
                 sqlexec(line);
             }
         }

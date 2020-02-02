@@ -19,13 +19,15 @@ typedef int32_t  s32;
 typedef int16_t  s16;
 typedef int8_t   s8;
 
+
 void db_add_user(const char* user_name);
 void db_get_delete_list(char* tmp_buf, size_t tmp_buf_len);
 bool db_check_and_log_access();
 void db_list_log(char* tmp_buf, size_t tmp_buf_len);
 void db_prune();
 void db_del_user(u64 uid);
-void db_init();
+void db_init(char*file_name);
+bool db_has_users();
 
 
 u64 rtc_offset = 0;
@@ -100,6 +102,9 @@ bool __is_touch(int id, int pin, int&sustain, bool&was_down) {
 }
 
 
+void serial_process();
+
+
 void setup() {
     Serial.begin(115200); // Initialize serial communications with the PC
     
@@ -139,7 +144,9 @@ void setup() {
     
     
     
-    db_init();
+    db_init("/spiffs/test4");
+
+    serial_process();
     
     SPI.begin(); // Init SPI bus
     mfrc522.PCD_Init(); // Init MFRC522
