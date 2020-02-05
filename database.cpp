@@ -26,10 +26,11 @@ extern u8 rfid[10];
 extern u8 rfid_len;
 
 #ifndef debugf
+#include <HardwareSerial.h>
 #define debugf Serial.printf
 #endif
 
-#if 1
+#if 0
 void dummy_debugf(char*,...) {}
 #undef debugf
 #define debugf dummy_debugf
@@ -372,7 +373,7 @@ void db_prune() {
 }
 
 void db_del_user(u64 uid) {
-    debugf("DEBUG: del user %ld\n", uid);
+    debugf("DEBUG: del user %llu\n", uid);
     u64 now = get_adjusted_time();
     {
         static const char*q = "UPDATE \"user\" SET \"active\" = 0 WHERE \"id\" = ?;";

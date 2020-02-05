@@ -66,7 +66,27 @@ set_rfid(m_r); \
 assert(db_check_and_log_access() == m_v);
 
 
+void serial_command_ls() {
+    printf("serial_command_ls\n");
+}
 
+void serial_command_rm(char* file_name) {
+    printf("serial_command_rm %s\n", file_name);
+}
+
+char* debug_serial_input = 
+"ls\n"
+"rm test\n"
+"sql select * from user\n"
+"sql select * from log\n"
+"boot\n"
+;
+char serial_process_get_char() {
+    assert(*debug_serial_input);
+    return *debug_serial_input++;
+}
+
+void serial_process();
 int main () {
     setbuf(stderr, 0);
     setbuf(stdout, 0);
@@ -121,6 +141,8 @@ int main () {
     
     check_access("abcdef", 0);
     check_access("abcdef-", 0);
+    
+    serial_process();
     
     
     check(

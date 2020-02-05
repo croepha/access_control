@@ -90,21 +90,41 @@ int touch2_sustain = 0;
 
 #define IS_TOUCH(id) __is_touch(id, PIN_TOUCH ## id, touch ## id ##_sustain, down ## id)
 bool __is_touch(int id, int pin, int&sustain, bool&was_down) {
-    bool down = 0; if (touchRead(pin) < 25 /*threshold*/) { 
-        if (sustain < 2) sustain++;
+
+    bool down_now = touchRead(pin) < 25 /*threshold*/ ;
+    //Serial.printf("IS_TOUCH %d %d %d\n", down_now, was_down, sustain);
+
+    bool down = 0; if (down_now) { 
+        if (sustain < 4) sustain++;
         else down = 1;   
     } else sustain = 0;
     bool pressed = 0; if (down) {
         if (!was_down) pressed = 1;
         was_down = 1;
     } else was_down = 0;
+    
     return pressed;
 }
 
 
 void serial_process();
 
-
+void serial_command_ls() {
+  File root = SPIFFS.open("/");
+  while(File file = root.openNextFile()) {
+    if (file.isDirectory()) {
+      Serial.printf("LS: '%s' *DIR*\n", file.name());
+    } else {
+      unsigned long long sz = file.size();
+      Serial.printf("LS: '%s' %ull\n", file.name(), sz);
+    }
+  }
+  Serial.printf("LS END\n");
+}
+void serial_command_rm(char* file_name) {
+  long r1 = SPIFFS.remove(file_name);
+  Serial.printf("RM: '%s' -> %l\n", r1);
+}
 void setup() {
     Serial.begin(115200); // Initialize serial communications with the PC
     
@@ -146,7 +166,7 @@ void setup() {
     
     db_init("/spiffs/test4");
 
-    serial_process();
+    // serial_process();
     
     SPI.begin(); // Init SPI bus
     mfrc522.PCD_Init(); // Init MFRC522
@@ -169,6 +189,11 @@ void setup() {
     pinMode(PIN_TOUCH1, OUTPUT);
     pinMode(PIN_TOUCH2, OUTPUT);
     
+}
+
+char serial_process_get_char() {
+    while (Serial.available() == 0); // wait for input
+    return Serial.read(); // read a single char
 }
 
 
@@ -290,6 +315,8 @@ void loop() {
     program: {
         Serial.println("PROGRAM\n");
         digitalWrite(PIN_UNLOCK, 0);
+
+        delay(500);
         
         WiFi.softAP("access_control", "access_control");
         MDNS.begin("access_control");
